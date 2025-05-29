@@ -1,0 +1,7 @@
+pypdf
+chromadb
+google-generativeai
+anthropic
+streamlit
+numpy
+python-dotenv 
