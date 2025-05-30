@@ -19,7 +19,7 @@ def generate_paper_feedback(user_text, similar_papers):
     prompt = PROMPT_TEMPLATE
 
     # Gemini API 호출
-    model = genai.GenerativeModel('gemini-pro')
+    model = genai.GenerativeModel('gemini-1.5-pro')
     response = model.generate_content([
         prompt,
         f"[사용자 논문]\n{user_text}",
