@@ -2,6 +2,8 @@ import streamlit as st
 import os
 import uuid
 import logging
+import asyncio
+import time
 from dotenv import load_dotenv
 from pdf_utils import extract_text_from_pdf
 from embedding import get_embedding
@@ -9,12 +11,17 @@ from paper_db import search_similar_papers, get_paper_count
 from ai_eval import generate_paper_feedback
 import anthropic
 
+# log 디렉토리 생성
+log_dir = "log"
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+
 # 로깅 설정
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('app.log'),
+        logging.FileHandler(os.path.join(log_dir, 'app.log')),
         logging.StreamHandler()
     ]
 )
@@ -25,26 +32,67 @@ load_dotenv()
 # Anthropic Claude API 설정
 client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
 
-def summarize_with_claude(text, system_prompt):
-    logger.info("Claude API를 사용하여 텍스트 요약 시작")
-    try:
-        message = client.messages.create(
-            model="claude-3-sonnet-20240229",
-            max_tokens=1000,
-            temperature=0.3,
-            system=system_prompt,
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"논문 내용:\n{text}"
-                }
-            ]
-        )
-        logger.info("텍스트 요약 완료")
-        return message.content[0].text
-    except Exception as e:
-        logger.error(f"Claude API 호출 중 오류 발생: {e}")
-        raise e
+# 요약 결과를 캐싱하기 위한 딕셔너리
+summary_cache = {}
+
+async def summarize_with_claude(text, system_prompt, paper_id):
+    """비동기로 텍스트를 요약하는 함수"""
+    # 캐시된 결과가 있으면 반환
+    if paper_id in summary_cache:
+        logger.info(f"캐시된 요약 결과 사용: {paper_id}")
+        return summary_cache[paper_id]
+
+    logger.info(f"Claude API를 사용하여 텍스트 요약 시작: {paper_id}")
+    max_retries = 3
+    retry_delay = 5  # 초기 대기 시간 5초
+
+    for attempt in range(max_retries):
+        try:
+            # API 호출 전 딜레이 추가 (점진적으로 증가)
+            await asyncio.sleep(retry_delay * (attempt + 1))
+            
+            message = client.messages.create(
+                model="claude-3-5-sonnet-20240620",
+                max_tokens=1000,
+                temperature=0.3,
+                system=system_prompt,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"논문 내용:\n{text}"
+                    }
+                ]
+            )
+            
+            # 결과를 캐시에 저장
+            summary_cache[paper_id] = message.content[0].text
+            logger.info(f"텍스트 요약 완료: {paper_id}")
+            return message.content[0].text
+
+        except Exception as e:
+            if attempt < max_retries - 1:
+                if "overloaded_error" in str(e) or "rate_limit_error" in str(e):
+                    wait_time = retry_delay * (attempt + 1) * 2  # 대기 시간을 2배로 증가
+                    logger.warning(f"API 오류 발생. {wait_time}초 후 재시도... (시도 {attempt + 1}/{max_retries})")
+                    await asyncio.sleep(wait_time)
+                    continue
+            logger.error(f"Claude API 호출 중 오류 발생: {e}")
+            raise e
+
+async def process_papers(similar_papers, summary_system_prompt):
+    """여러 논문을 순차적으로 처리하는 함수"""
+    results = []
+    for paper in similar_papers:
+        paper_path = os.path.join("data/papers", paper['source'])
+        if os.path.exists(paper_path):
+            paper_text = extract_text_from_pdf(paper_path)
+            # 각 논문을 순차적으로 처리
+            result = await summarize_with_claude(paper_text, summary_system_prompt, paper['source'])
+            results.append(result)
+            # 논문 간 처리 간격 추가
+            await asyncio.sleep(5)
+    
+    return results
 
 st.set_page_config(page_title="논문 RAG 평가 프로토타입", page_icon=":books:")
 st.title("논문 PDF 임베딩 및 유사 논문 검색 (프로토타입)")
@@ -122,16 +170,8 @@ if search_file is not None:
             - 부연설명은하지않는다.
             """
             
-            for paper in similar_papers:
-                logger.info(f"논문 처리 중: {paper['source']}")
-                paper_path = os.path.join("data/papers", paper['source'])
-                if os.path.exists(paper_path):
-                    paper_text = extract_text_from_pdf(paper_path)
-                    similar_papers_text.append(paper_text)
-                    logger.info(f"논문 {paper['source']} 요약 시작")
-                    summary = summarize_with_claude(paper_text, summary_system_prompt)
-                    summarized_papers.append(summary)
-                    logger.info(f"논문 {paper['source']} 요약 완료")
+            # 비동기로 논문 처리
+            summarized_papers = asyncio.run(process_papers(similar_papers, summary_system_prompt))
             
             # 각 논문에 대한 요약 표시
             st.subheader("유사 논문 요약")

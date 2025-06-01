@@ -3,12 +3,17 @@ from chromadb.utils import embedding_functions
 import os
 import logging
 
+# log 디렉토리 생성
+log_dir = "log"
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+
 # 로깅 설정
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('paper_db.log'),
+        logging.FileHandler(os.path.join(log_dir, 'paper_db.log')),
         logging.StreamHandler()
     ]
 )

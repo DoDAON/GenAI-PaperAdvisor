@@ -5,12 +5,17 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import tiktoken
 
+# log 디렉토리 생성
+log_dir = "log"
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+
 # 로깅 설정
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('embedding.log'),
+        logging.FileHandler(os.path.join(log_dir, 'embedding.log')),
         logging.StreamHandler()
     ]
 )
