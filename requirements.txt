@@ -1,7 +1,8 @@
 pypdf
 chromadb
 google-generativeai
-anthropic
 streamlit
 numpy
-python-dotenv 
+python-dotenv
+PyPDF2
+openai

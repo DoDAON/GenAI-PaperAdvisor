@@ -5,7 +5,7 @@
 - **주요 기술**: 
   - Python, Streamlit (웹 인터페이스)
   - ChromaDB (벡터 데이터베이스)
-  - Voyage Embedding (텍스트 임베딩)
+  - OpenAI Embedding (텍스트 임베딩)
   - Gemini Pro (생성형 AI)
   - PyPDF (PDF 텍스트 추출)
 
@@ -15,7 +15,7 @@ project-root/
 ├── main.py                # Streamlit 메인 애플리케이션
 ├── batch_process_pdfs.py  # PDF 일괄 처리 스크립트
 ├── paper_db.py            # ChromaDB 연동 및 논문 관리
-├── embedding.py           # Voyage 임베딩 API 연동
+├── embedding.py           # OpenAI 임베딩 API 연동
 ├── pdf_utils.py           # PDF 텍스트 추출 유틸리티
 ├── ai_eval.py             # Gemini Pro 평가 및 제안
 ├── requirements.txt       # 프로젝트 의존성
@@ -71,7 +71,7 @@ project-root/
 ### 4.2 API 키 설정
 `.env` 파일 생성 후 다음 환경변수 설정:
 ```
-VOYAGE_API_KEY=your_voyage_api_key
+OPENAI_API_KEY=your_openai_api_key
 GOOGLE_API_KEY=your_google_api_key
 ```
 
@@ -88,7 +88,7 @@ GOOGLE_API_KEY=your_google_api_key
 ## 5. 데이터베이스 구조 (ChromaDB)
 - **Collection: papers**
   - **id**: UUID 기반 고유 식별자
-  - **embedding**: Voyage 임베딩 벡터
+  - **embedding**: OpenAI 임베딩 벡터
   - **metadata**:
     - title: 논문 제목
     - authors: 저자
@@ -107,4 +107,4 @@ GOOGLE_API_KEY=your_google_api_key
 - [ ] 평가 이력 관리 기능
 - [ ] 논문 태그/키워드 자동 추출
 - [ ] 성능 최적화 및 에러 처리 강화
-- [ ] UI/UX 개선 
+- [ ] UI/UX 개선

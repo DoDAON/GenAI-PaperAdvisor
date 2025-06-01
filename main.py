@@ -4,7 +4,7 @@ import uuid
 from dotenv import load_dotenv
 from pdf_utils import extract_text_from_pdf
 from embedding import get_embedding
-from paper_db import add_paper_to_db, search_similar_papers, get_paper_count
+from paper_db import search_similar_papers, get_paper_count
 from ai_eval import generate_paper_feedback
 import google.generativeai as genai
 
