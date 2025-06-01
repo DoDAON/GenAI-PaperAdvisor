@@ -6,3 +6,4 @@ numpy
 python-dotenv
 PyPDF2
 openai
+tiktoken
