@@ -1,8 +1,20 @@
 import os
 import re
+import logging
 from dotenv import load_dotenv
 from openai import OpenAI
 import tiktoken
+
+# 로깅 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('embedding.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -16,12 +28,14 @@ def count_tokens(text):
 
 def preprocess_text(text):
     """텍스트 전처리 함수"""
+    logger.info("텍스트 전처리 시작")
     # 불필요한 공백 제거
     text = ' '.join(text.split())
     # 특수문자 제거
     text = re.sub(r'[^\w\s]', ' ', text)
     # 연속된 공백 제거
     text = re.sub(r'\s+', ' ', text)
+    logger.info("텍스트 전처리 완료")
     return text.strip()
 
 def split_text(text, max_tokens=4000):  # 더 작은 청크 크기로 설정
@@ -119,36 +133,45 @@ def split_text(text, max_tokens=4000):  # 더 작은 청크 크기로 설정
 
 def get_embedding(text, model="text-embedding-3-small"):
     """텍스트의 임베딩을 생성하는 함수"""
+    logger.info("임베딩 생성 시작")
     # 텍스트 전처리
     text = preprocess_text(text)
     
     # 토큰 수 확인
     token_count = count_tokens(text)
+    logger.info(f"전체 토큰 수: {token_count}")
     
     # 텍스트가 너무 길면 분할
     if token_count > 4000:  # 더 작은 임계값으로 설정
+        logger.info("텍스트가 너무 길어 분할 처리 시작")
         chunks = split_text(text)
         embeddings = []
-        for chunk in chunks:
+        for i, chunk in enumerate(chunks):
             try:
                 chunk_tokens = count_tokens(chunk)
-                print(f"청크 처리 중: {chunk_tokens} 토큰")
+                logger.info(f"청크 {i+1}/{len(chunks)} 처리 중: {chunk_tokens} 토큰")
                 
                 response = client.embeddings.create(
                     model=model,
                     input=chunk
                 )
                 embeddings.append(response.data[0].embedding)
+                logger.info(f"청크 {i+1} 임베딩 생성 완료")
             except Exception as e:
-                print(f"청크 처리 중 오류 발생: {str(e)}")
-                print(f"청크 길이: {len(chunk)} 문자, 토큰 수: {count_tokens(chunk)}")
+                logger.error(f"청크 {i+1} 처리 중 오류 발생: {str(e)}")
+                logger.error(f"청크 길이: {len(chunk)} 문자, 토큰 수: {count_tokens(chunk)}")
                 raise e
                 
         # 모든 청크의 임베딩 평균 계산
-        return [sum(x) / len(x) for x in zip(*embeddings)]
+        logger.info("모든 청크의 임베딩 평균 계산 중")
+        result = [sum(x) / len(x) for x in zip(*embeddings)]
+        logger.info("임베딩 생성 완료")
+        return result
     else:
+        logger.info("단일 청크 임베딩 생성 중")
         response = client.embeddings.create(
             model=model,
             input=text
         )
+        logger.info("임베딩 생성 완료")
         return response.data[0].embedding 

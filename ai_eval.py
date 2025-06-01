@@ -1,9 +1,21 @@
 import os
+import logging
 from dotenv import load_dotenv
-import google.generativeai as genai
+import anthropic
+
+# 로깅 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('ai_eval.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
 
 PROMPT_TEMPLATE = """
             # 지시문
@@ -39,24 +51,32 @@ PROMPT_TEMPLATE = """
             """
 
 def generate_paper_feedback(user_text, summarized_papers):
-    # Gemini API 호출
-    model = genai.GenerativeModel('gemini-1.5-pro')
-    
-    # 생성 설정
-    generation_config = {
-        "temperature": 0.3,
-        "max_output_tokens": 2000,
-    }
+    logger.info("논문 평가 및 피드백 생성 시작")
     
     # 프롬프트에 데이터 삽입
+    logger.info("프롬프트 템플릿에 데이터 삽입")
     prompt = PROMPT_TEMPLATE.replace(
         "{{user_info_text}}", user_text
     ).replace(
         "{{summarized_document}}", "\n\n".join(summarized_papers)
     )
     
-    response = model.generate_content(
-        prompt,
-        generation_config=generation_config
-    )
-    return response.text 
+    logger.info("Claude API 호출 시작")
+    try:
+        message = client.messages.create(
+            model="claude-3-sonnet-20240229",
+            max_tokens=2000,
+            temperature=0.3,
+            system=prompt,
+            messages=[
+                {
+                    "role": "user",
+                    "content": "논문을 평가하고 개선 방향을 제안해주세요."
+                }
+            ]
+        )
+        logger.info("논문 평가 및 피드백 생성 완료")
+        return message.content[0].text
+    except Exception as e:
+        logger.error(f"Claude API 호출 중 오류 발생: {e}")
+        raise e 
