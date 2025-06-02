@@ -52,7 +52,7 @@ async def summarize_with_claude(text, system_prompt, paper_id):
             await asyncio.sleep(retry_delay * (attempt + 1))
             
             message = client.messages.create(
-                model="claude-3-5-sonnet-20240620",
+                model="claude-3-5-haiku-20241022",
                 max_tokens=1000,
                 temperature=0.3,
                 system=system_prompt,
@@ -94,8 +94,8 @@ async def process_papers(similar_papers, summary_system_prompt):
     
     return results
 
-st.set_page_config(page_title="논문 RAG 평가 프로토타입", page_icon=":books:")
-st.title("논문 PDF 임베딩 및 유사 논문 검색 (프로토타입)")
+st.set_page_config(page_title="논문 RAG 평가", page_icon=":books:")
+st.title("논문 PDF 임베딩 및 유사 논문 검색")
 
 # ChromaDB에 저장된 논문 수 확인
 paper_count = get_paper_count()
@@ -138,15 +138,17 @@ if search_file is not None:
     logger.info("유사 논문 검색 완료")
     
     similar_papers = []
+    st.markdown("# 유사 논문 상위 3개")
+    file_list = []
     for i, (meta, dist) in enumerate(zip(results["metadatas"][0], results["distances"][0])):
         logger.info(f"유사 논문 {i+1} 처리 중: {meta['title']}")
-        st.markdown(f"**{i+1}. {meta['title']}** (유사도: {1-dist:.4f})")
-        st.markdown(f"- 저자: {meta['authors']}")
-        st.markdown(f"- 연도: {meta['year']}")
-        st.markdown(f"- 초록: {meta['abstract']}")
-        st.markdown(f"- 파일명: {meta['source']}")
-        st.markdown("---")
+        file_list.append(meta['source'])
         similar_papers.append(meta)
+    
+    for file in file_list:
+        st.markdown(f"- {file}")
+    
+    st.markdown("---")
     
     os.remove(temp_path)
     logger.info(f"임시 파일 삭제 완료: {temp_path}")
@@ -180,6 +182,6 @@ if search_file is not None:
                     st.markdown(summary)
             
             # AI 평가 및 개선 제안
-            feedback = generate_paper_feedback(user_text, summarized_papers)
+            feedback = asyncio.run(generate_paper_feedback(user_text, summarized_papers))
             st.subheader("AI 평가 및 개선 제안 결과")
             st.markdown(feedback, unsafe_allow_html=True) 

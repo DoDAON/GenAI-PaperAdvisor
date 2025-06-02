@@ -3,6 +3,7 @@ import logging
 import time
 from dotenv import load_dotenv
 import anthropic
+import asyncio
 
 # log 디렉토리 생성
 log_dir = "log"
@@ -48,7 +49,7 @@ INDIVIDUAL_PAPER_PROMPT = """
 
             # 출력 형태
             ### 참고 논문 기반 개선 제안
-            [참고 논문을 바탕으로 사용자 논문의 개선점을 구체적으로 제시합니다.]
+            [참고 논문을 바탕으로 사용자 논문의 개선점을 구체적으로 제시합니다. 평가의 기준이 되는 내용이 참고 논문의 어떤 내용을 기준으로 했는지도 함께 포함하여야 합니다.]
             """
 
 # 최종 종합 평가를 위한 프롬프트
@@ -74,12 +75,18 @@ FINAL_EVAL_PROMPT = """
             [개별 평가 결과를 종합하여 전체적인 평가와 구체적인 개선 방향을 제시합니다.]
             """
 
-def evaluate_single_paper(user_text, reference_paper, attempt=0):
+async def evaluate_single_paper(user_text, reference_paper, attempt=0):
     """단일 논문 평가 함수"""
     max_retries = 3
-    retry_delay = 60
+    retry_delay = 15
 
     try:
+        # 텍스트 길이 제한 (약 4000자)
+        if len(user_text) > 4000:
+            user_text = user_text[:4000] + "..."
+        if len(reference_paper) > 4000:
+            reference_paper = reference_paper[:4000] + "..."
+
         prompt = INDIVIDUAL_PAPER_PROMPT.replace(
             "{{user_info_text}}", user_text
         ).replace(
@@ -87,8 +94,8 @@ def evaluate_single_paper(user_text, reference_paper, attempt=0):
         )
 
         message = client.messages.create(
-            model="claude-3-5-sonnet-20240620",
-            max_tokens=1000,
+            model="claude-3-5-haiku-20241022",
+            max_tokens=800,  # 토큰 수 감소
             temperature=0.3,
             system=prompt,
             messages=[
@@ -104,22 +111,30 @@ def evaluate_single_paper(user_text, reference_paper, attempt=0):
         if "rate_limit_error" in str(e) and attempt < max_retries - 1:
             wait_time = retry_delay * (attempt + 1)
             logger.warning(f"Rate limit 도달. {wait_time}초 후 재시도... (시도 {attempt + 1}/{max_retries})")
-            time.sleep(wait_time)
-            return evaluate_single_paper(user_text, reference_paper, attempt + 1)
+            await asyncio.sleep(wait_time)
+            return await evaluate_single_paper(user_text, reference_paper, attempt + 1)
         else:
             logger.error(f"단일 논문 평가 중 오류 발생: {e}")
             raise e
 
-def generate_final_evaluation(individual_evaluations):
+async def generate_final_evaluation(individual_evaluations):
     """개별 평가 결과를 종합하여 최종 평가 생성"""
     try:
+        # 각 평가 결과의 길이 제한
+        limited_evaluations = []
+        for eval in individual_evaluations:
+            if len(eval) > 2000:
+                limited_evaluations.append(eval[:2000] + "...")
+            else:
+                limited_evaluations.append(eval)
+
         prompt = FINAL_EVAL_PROMPT.replace(
-            "{{individual_evaluations}}", "\n\n".join(individual_evaluations)
+            "{{individual_evaluations}}", "\n\n".join(limited_evaluations)
         )
 
         message = client.messages.create(
-            model="claude-3-5-sonnet-20240620",
-            max_tokens=2000,
+            model="claude-3-5-haiku-20241022",
+            max_tokens=1500,  # 토큰 수 감소
             temperature=0.3,
             system=prompt,
             messages=[
@@ -135,7 +150,7 @@ def generate_final_evaluation(individual_evaluations):
         logger.error(f"최종 평가 생성 중 오류 발생: {e}")
         raise e
 
-def generate_paper_feedback(user_text, summarized_papers):
+async def generate_paper_feedback(user_text, summarized_papers):
     """논문 평가 및 피드백 생성 메인 함수"""
     logger.info("논문 평가 및 피드백 생성 시작")
     
@@ -144,14 +159,14 @@ def generate_paper_feedback(user_text, summarized_papers):
         individual_evaluations = []
         for i, paper in enumerate(summarized_papers):
             logger.info(f"논문 {i+1} 평가 시작")
-            evaluation = evaluate_single_paper(user_text, paper)
+            evaluation = await evaluate_single_paper(user_text, paper)
             individual_evaluations.append(evaluation)
             logger.info(f"논문 {i+1} 평가 완료")
-            time.sleep(2)  # API 호출 간 간격 추가
+            await asyncio.sleep(20)  # API 호출 간 간격을 20초로 증가
         
         # 개별 평가 결과를 종합하여 최종 평가 생성
         logger.info("최종 평가 생성 시작")
-        final_evaluation = generate_final_evaluation(individual_evaluations)
+        final_evaluation = await generate_final_evaluation(individual_evaluations)
         logger.info("최종 평가 생성 완료")
         
         return final_evaluation
